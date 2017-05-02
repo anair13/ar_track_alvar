@@ -194,7 +194,9 @@ void getCapCallback (const sensor_msgs::ImageConstPtr & image_msg)
       			ar_pose_marker.header.frame_id = output_frame;
 			    ar_pose_marker.header.stamp = image_msg->header.stamp;
 			    ar_pose_marker.id = id;
-			    arPoseMarkers_.markers.push_back (ar_pose_marker);	
+			    arPoseMarkers_.markers.push_back (ar_pose_marker);
+
+			    cout << "******* ID: " << id << endl;
 			}
 			arMarkerPub_.publish (arPoseMarkers_);
 		}

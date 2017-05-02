@@ -260,8 +260,9 @@ int InferCorners(const ARCloud &cloud, MultiMarkerBundle &master, ARCloud &bund_
             p.point.z = corner_coord.z()/100.0;
             
             try{
-                tf_listener->waitForTransform(cloud.header.frame_id, marker_frame, ros::Time(0), ros::Duration(0.1));
-                tf_listener->transformPoint(cloud.header.frame_id, p, output_p);			
+              //tf_listener->waitForTransform(cloud.header.frame_id, marker_frame, ros::Time(0), ros::Duration(0.1));
+              tf_listener->waitForTransform(marker_frame, cloud.header.frame_id, ros::Time(0), ros::Duration(0.1));
+              tf_listener->transformPoint(cloud.header.frame_id, p, output_p);			
             }
             catch (tf::TransformException ex){
                 ROS_ERROR("ERROR InferCorners: %s",ex.what());
@@ -527,7 +528,9 @@ void makeMarkerMsgs(int type, int id, Pose &p, sensor_msgs::ImageConstPtr image_
   std::string id_string = out.str();
   markerFrame += id_string;
   tf::StampedTransform camToMarker (t, image_msg->header.stamp, image_msg->header.frame_id, markerFrame.c_str());
+  tf::StampedTransform markerToCam (t.inverse(), image_msg->header.stamp, markerFrame.c_str(), image_msg->header.frame_id);
   tf_broadcaster->sendTransform(camToMarker);
+  // tf_broadcaster->sendTransform(markerToCam);
 
   //Create the rviz visualization message
   tf::poseTFToMsg (markerPose, rvizMarker->pose);

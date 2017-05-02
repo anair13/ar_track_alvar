@@ -280,7 +280,8 @@ void GetMarkerPoses(IplImage *image, ARCloud &cloud) {
 
 	  int resol = m->GetRes();
 	  int ori = m->ros_orientation;
-      
+    
+    ori = (ori + 3) % 4;
 	  PointDouble pt1, pt2, pt3, pt4;
 	  pt4 = m->ros_marker_points_img[0];
 	  pt3 = m->ros_marker_points_img[resol-1];
@@ -317,8 +318,12 @@ void getPointCloudCallback (const sensor_msgs::PointCloud2ConstPtr &msg)
 {
   sensor_msgs::ImagePtr image_msg(new sensor_msgs::Image);
 
+  cout << "camera frame received" << endl;
+
   //If we've already gotten the cam info, then go ahead
-  if(cam->getCamInfo_){
+  //if(cam->getCamInfo_) {
+  //  cout << "camera info already received" << endl;
+
     //Convert cloud to PCL 
     ARCloud cloud;
     pcl::fromROSMsg(*msg, cloud);
@@ -347,16 +352,17 @@ void getPointCloudCallback (const sensor_msgs::PointCloud2ConstPtr &msg)
     try{
       tf::StampedTransform CamToOutput;
       try{
-	tf_listener->waitForTransform(output_frame, image_msg->header.frame_id, image_msg->header.stamp, ros::Duration(1.0));
-	tf_listener->lookupTransform(output_frame, image_msg->header.frame_id, image_msg->header.stamp, CamToOutput);
+      	tf_listener->waitForTransform(output_frame, image_msg->header.frame_id, image_msg->header.stamp, ros::Duration(1.0));
+      	tf_listener->lookupTransform(output_frame, image_msg->header.frame_id, image_msg->header.stamp, CamToOutput);
       }
       catch (tf::TransformException ex){
-	ROS_ERROR("%s",ex.what());
+	       ROS_ERROR("%s",ex.what());
       }
 
       arPoseMarkers_.markers.clear ();
       for (size_t i=0; i<marker_detector.markers->size(); i++) 
-	{
+	  {
+
 	  //Get the pose relative to the camera
 	  int id = (*(marker_detector.markers))[i].GetId(); 
 	  Pose p = (*(marker_detector.markers))[i].pose;
@@ -369,21 +375,41 @@ void getPointCloudCallback (const sensor_msgs::PointCloud2ConstPtr &msg)
 	  double qz = p.quaternion[3];
 	  double qw = p.quaternion[0];
 
-      tf::Quaternion rotation (qx,qy,qz,qw);
-      tf::Vector3 origin (px,py,pz);
-      tf::Transform t (rotation, origin);
-      tf::Vector3 markerOrigin (0, 0, 0);
-      tf::Transform m (tf::Quaternion::getIdentity (), markerOrigin);
-      tf::Transform markerPose = t * m; // marker pose in the camera frame
+    std::string dummy = "/dummy_camera";
+    tf::StampedTransform dummyToCameraLink;
+    try{
+      tf_listener->waitForTransform(image_msg->header.frame_id, "/camera_link", image_msg->header.stamp, ros::Duration(1.0));
+      tf_listener->lookupTransform(image_msg->header.frame_id, "/camera_link", image_msg->header.stamp, dummyToCameraLink);
+      // printf("parent %s child %s\n", dummyToCameraLink.frame_id_.c_str(), dummyToCameraLink.child_frame_id_.c_str());
+      dummyToCameraLink.frame_id_ = dummy;
+      tf_broadcaster->sendTransform(dummyToCameraLink);
+    }
+    catch (tf::TransformException ex){
+       ROS_ERROR("%s",ex.what());
+    }
+
+    // tf::Transform turn;
+    // turn.setOrigin( tf::Vector3(0.0, 0.0, 0.0) );
+    // turn.setRotation( tf::createQuaternionFromRPY(0,0,M_PI/2) );
+
+    tf::Quaternion rotation (qx,qy,qz,qw);
+    tf::Vector3 origin (px,py,pz);
+    tf::Transform t (rotation, origin);
+    tf::Vector3 markerOrigin (0, 0, 0);
+    tf::Transform m (tf::Quaternion::getIdentity (), markerOrigin);
+    tf::Transform markerPose = t * m; // marker pose in the camera frame
 
 	  //Publish the transform from the camera to the marker		
-	  std::string markerFrame = "ar_marker_";
+	  std::string markerFrame = "kinect_ar_marker_";
 	  std::stringstream out;
 	  out << id;
 	  std::string id_string = out.str();
 	  markerFrame += id_string;
 	  tf::StampedTransform camToMarker (t, image_msg->header.stamp, image_msg->header.frame_id, markerFrame.c_str());
-	  tf_broadcaster->sendTransform(camToMarker);
+    // printf("ID: %s\n", image_msg->header.frame_id.c_str());
+	  tf::StampedTransform markerToCam (markerPose.inverse(), image_msg->header.stamp, markerFrame.c_str(), dummy);
+    tf_broadcaster->sendTransform(camToMarker);
+    // tf_broadcaster->sendTransform(markerToCam);
 				
 	  //Create the rviz visualization messages
 	  tf::poseTFToMsg (markerPose, rvizMarker_.pose);
@@ -456,7 +482,7 @@ void getPointCloudCallback (const sensor_msgs::PointCloud2ConstPtr &msg)
     catch (cv_bridge::Exception& e){
       ROS_ERROR ("Could not convert from '%s' to 'rgb8'.", image_msg->encoding.c_str ());
     }
-  }
+  //} // end if
 }
 
 void configCallback(ar_track_alvar::ParamsConfig &config, uint32_t level)
